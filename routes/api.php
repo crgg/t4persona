@@ -1,8 +1,11 @@
 <?php
 
-use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\EmailVerificationController;
+use App\Http\Controllers\MediaController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,10 +23,30 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 */
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+
+Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/login',    [AuthController::class, 'login']);
 
 Route::middleware('auth:api')->group(function () {
-    Route::get('/me',     [AuthController::class, 'me']);
-    Route::post('/logout',[AuthController::class, 'logout']);
+    Route::get('/auth/me',      [AuthController::class, 'me']);
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    // Email resend (requiere usuario autenticado)
+    Route::post('/email/resend', [EmailVerificationController::class, 'resend']);
+    Route::get('/auth/user',      [AuthController::class, 'user']);
+
+    Route::middleware(['email.verified'])->group(function () {
+
+        Route::apiResources([
+            'assistants'   => AssistantController::class,
+            'media'        => MediaController::class
+
+        ]);
+    });
+
 });
+
+// Email verify con URL firmada
+Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+    ->name('verification.verify')
+    ->middleware('signed');
