@@ -18,6 +18,9 @@ return new class extends Migration {
             $table->text('transcription')->nullable();
             $table->json('metadata')->nullable();
             $table->timestampTz('date_upload')->useCurrent();
+            $table->index('assistant_id');
+            $table->index('date_upload');
+
         });
 
         DB::statement('ALTER TABLE media ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb');

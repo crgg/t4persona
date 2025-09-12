@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Database\QueryException;
 use App\Http\Resources\AssistantResource;
 use App\Http\Resources\AssistantCollection;
 
@@ -21,20 +22,18 @@ class AssistantController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage    = $this->getPerPage($request);
-        $searchTerm = $this->getSearchTerm($request); // ← lee ?search=
+        $searchTerm = $this->getSearchTerm($request);
 
         $query = Assistant::query()
             ->where('user_id', $request->user()->id)
             ->orderBy('date_creation', 'desc');
 
-        // Búsqueda por nombre (Postgres ILIKE = case-insensitive)
         if ($searchTerm !== null) {
             $query->where('name', 'ilike', '%' . $searchTerm . '%');
         }
 
         $paginator = $query->paginate($perPage)->withQueryString();
 
-        // AssistantCollection devuelve { status, data, pagination }
         return response()->json(
             (new AssistantCollection($paginator))->toArray($request)
         );
@@ -48,7 +47,6 @@ class AssistantController extends Controller
                 'required',
                 'string',
                 'max:150',
-                // único por usuario
                 Rule::unique('assistants', 'name')->where(function ($q) use ($request) {
                     $q->where('user_id', $request->user()->id);
                 }),
@@ -67,13 +65,21 @@ class AssistantController extends Controller
         $data = $validator->validated();
 
         $assistant                   = new Assistant();
-        $assistant->id               = (string) Str::uuid(); // UUID en PHP
+        $assistant->id               = (string) Str::uuid();
         $assistant->user_id          = $request->user()->id;
         $assistant->name             = trim($data['name']);
         $assistant->state            = array_key_exists('state', $data) ? $data['state'] : 'neutral';
         $assistant->base_personality = array_key_exists('base_personality', $data) ? $data['base_personality'] : null;
         $assistant->date_creation    = now();
-        $assistant->save();
+
+        try {
+            $assistant->save();
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => ['database' => ['Error creating assistant']],
+            ], 500);
+        }
 
         return response()->json([
             'status' => true,
@@ -83,9 +89,9 @@ class AssistantController extends Controller
     }
 
     // GET /assistants/{assistant}
-    public function show(Request $request, Assistant $assistant): JsonResponse
+    public function show(Request $request, string $assistant ): JsonResponse
     {
-        $this->assertOwner($request, $assistant);
+        $assistant = $this->getAssistantOrFail($request, $assistant);
 
         return response()->json([
             'status' => true,
@@ -95,9 +101,9 @@ class AssistantController extends Controller
     }
 
     // PUT/PATCH /assistants/{assistant}
-    public function update(Request $request, Assistant $assistant): JsonResponse
+    public function update(Request $request, string $assistant): JsonResponse
     {
-        $this->assertOwner($request, $assistant);
+        $assistant = $this->getAssistantOrFail($request, $assistant);
 
         $validator = Validator::make($request->all(), [
             'name' => [
@@ -134,7 +140,14 @@ class AssistantController extends Controller
             $assistant->base_personality = $data['base_personality'];
         }
 
-        $assistant->save();
+        try {
+            $assistant->save();
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => ['database' => ['Error updating assistant']],
+            ], 500);
+        }
 
         return response()->json([
             'status' => true,
@@ -144,11 +157,18 @@ class AssistantController extends Controller
     }
 
     // DELETE /assistants/{assistant}
-    public function destroy(Request $request, Assistant $assistant): JsonResponse
+    public function destroy(Request $request, string $assistant): JsonResponse
     {
-        $this->assertOwner($request, $assistant);
+        $assistant = $this->getAssistantOrFail($request, $assistant);
 
-        $assistant->delete();
+        try {
+            $assistant->delete();
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => ['database' => ['Error deleting assistant']],
+            ], 500);
+        }
 
         return response()->json([
             'status' => true,
@@ -191,10 +211,9 @@ class AssistantController extends Controller
         return $value;
     }
 
-    // LEE ?search=... (no ?q=...)
     private function getSearchTerm(Request $request): ?string
     {
-        $value = $request->query('search'); // ← aquí cambiamos la key
+        $value = $request->query('search');
 
         if (!is_string($value)) {
             return null;
@@ -207,5 +226,45 @@ class AssistantController extends Controller
         }
 
         return $value;
+    }
+
+    /**
+     * Busca por ID con validación de UUID y control de errores.
+     * Lanza HttpResponseException con el JSON apropiado si algo falla.
+     */
+    private function getAssistantOrFail(Request $request, string $id): Assistant
+    {
+        if (!Str::isUuid($id)) {
+            throw new HttpResponseException(
+                response()->json([
+                    'status' => false,
+                    'errors' => ['id' => ['Invalid UUID format']],
+                ], 422)
+            );
+        }
+
+        try {
+            $assistant = Assistant::where('id', $id)->first();
+        } catch (QueryException $e) {
+            throw new HttpResponseException(
+                response()->json([
+                    'status' => false,
+                    'errors' => ['database' => ['Query error']],
+                ], 400)
+            );
+        }
+
+        if (!$assistant) {
+            throw new HttpResponseException(
+                response()->json([
+                    'status' => false,
+                    'errors' => ['assistant' => ['Not found']],
+                ], 404)
+            );
+        }
+
+        $this->assertOwner($request, $assistant);
+
+        return $assistant;
     }
 }

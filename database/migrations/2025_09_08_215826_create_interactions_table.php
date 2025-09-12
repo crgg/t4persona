@@ -10,8 +10,8 @@ return new class extends Migration {
     {
         Schema::create('interactions', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->uuid('generated_session_id');
-            $table->foreign('generated_session_id')->references('id')->on('generated_sessions')->cascadeOnDelete();
+            $table->uuid('session_id');
+            $table->foreign('session_id')->references('id')->on('sessions')->cascadeOnDelete();
 
             $table->text('text_from_user')->nullable();
             $table->text('assistant_text_response')->nullable();

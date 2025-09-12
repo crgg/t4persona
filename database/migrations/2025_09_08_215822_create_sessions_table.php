@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('generated_sessions', function (Blueprint $table) {
+        Schema::create('sessions', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->uuid('assistant_id');
@@ -22,6 +22,6 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::dropIfExists('generated_sessions');
+        Schema::dropIfExists('sessions');
     }
 };

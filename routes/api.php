@@ -3,9 +3,11 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\AssistantController;
-use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\SessionController;
+use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\InteractionController;
+use App\Http\Controllers\EmailVerificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,11 +42,24 @@ Route::middleware('auth:api')->group(function () {
         Route::apiResources([
             'assistants'   => AssistantController::class,
             'media'        => MediaController::class
-
         ]);
+
+        Route::apiResource('interactions', InteractionController::class)->except(['update']);
+
+        Route::post('/sessions/start', [SessionController::class, 'start']);
+        Route::post('/sessions/{session}/end', [SessionController::class, 'end']);
+        Route::get('/sessions/{session}',   [SessionController::class, 'show']);
+
     });
 
 });
+
+Route::middleware('software.respond_api_token')->group(function () {
+    Route::post('/interactions/{interaction}/respond', [SessionController::class, 'respond']);
+});
+
+
+
 
 // Email verify con URL firmada
 Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])

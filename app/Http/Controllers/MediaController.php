@@ -100,16 +100,19 @@ class MediaController extends Controller
         // URL pública normal directamente del disk S3
         $publicUrl = Storage::disk('s3')->url($key);
 
+        do {
+            $id = (string) Str::uuid();
+        } while (Media::whereKey($id)->exists());
+
         $media               = new Media();
+        $media->id           = $id;        // ← GENERAR UUID AQUÍ
         $media->assistant_id = $assistant->id;
         $media->type         = $data['type'];
-        $media->storage_url  = $publicUrl;                // guardamos la URL pública
+        $media->storage_url  = $publicUrl;
         $media->transcription= $data['transcription'] ?? null;
         $media->metadata     = $data['metadata'] ?? null;
         $media->date_upload  = now();
         $media->save();
-
-        $media->refresh();
 
         return response()->json([
             'status' => true,
@@ -119,8 +122,16 @@ class MediaController extends Controller
     }
 
     // GET /media/{media}
-    public function show(Request $request, Media $media): JsonResponse
+    public function show(Request $request,  $media): JsonResponse
     {
+        $media = Media::where('id',$media)->first();
+        if(!$media){
+            return response()->json([
+                'status' => false,
+                'msg'    => 'Media Not Exists',
+            ], 404);
+        }
+
         $this->assertMediaOwner($request, $media);
 
         return response()->json([
@@ -133,6 +144,13 @@ class MediaController extends Controller
     // PUT/PATCH /media/{media}
     public function update(Request $request, Media $media): JsonResponse
     {
+
+        return response()->json([
+            'status' => false,
+            'msg'    => 'Only delete the media',
+        ], 404);
+
+        /*
         $this->assertMediaOwner($request, $media);
 
         $validator = Validator::make($request->all(), [
@@ -183,11 +201,20 @@ class MediaController extends Controller
             'msg'    => 'Updated',
             'data'   => $this->presentMedia($media),
         ]);
+        */
     }
 
     // DELETE /media/{media}
-    public function destroy(Request $request, Media $media): JsonResponse
+    public function destroy(Request $request, $media): JsonResponse
     {
+        $media = Media::where('id',$media)->first();
+        if(!$media){
+            return response()->json([
+                'status' => false,
+                'msg'    => 'Media Not Exists',
+            ], 404);
+        }
+
         $this->assertMediaOwner($request, $media);
 
         $key = $this->keyFromUrl($media->storage_url);
