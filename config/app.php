@@ -210,7 +210,7 @@ return [
 
     'aliases' => Facade::defaultAliases()->merge([
         // 'ExampleClass' => App\Example\ExampleClass::class,
-        'API_RESPONSE_KEY' => env('API_RESPONSE_KEY')
     ])->toArray(),
+    'API_RESPONSE_KEY' => env('API_RESPONSE_KEY')
 
 ];

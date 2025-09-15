@@ -8,6 +8,7 @@ use App\Http\Controllers\SessionController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\InteractionController;
 use App\Http\Controllers\EmailVerificationController;
+use App\Http\Controllers\SoftwareInterationsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,7 +31,7 @@ Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login',    [AuthController::class, 'login']);
 
 Route::middleware('auth:api')->group(function () {
-    Route::get('/auth/me',      [AuthController::class, 'me']);
+    Route::get('/auth/me',      [AuthController::class, 'user']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // Email resend (requiere usuario autenticado)
@@ -49,13 +50,18 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/sessions/start', [SessionController::class, 'start']);
         Route::post('/sessions/{session}/end', [SessionController::class, 'end']);
         Route::get('/sessions/{session}',   [SessionController::class, 'show']);
-
+        Route::get('/interactions/was-canceled', [InteractionController::class, 'wasCanceled']);
+        Route::post('/interactions/{interaction}/cancel', [InteractionController::class, 'cancel']);      // cancelar por ID
+        Route::post('/interactions/cancel-last',          [InteractionController::class, 'cancelLast']);  // cancelar la ultima pendiente por sesión
     });
 
 });
 
 Route::middleware('software.respond_api_token')->group(function () {
-    Route::post('/interactions/{interaction}/respond', [SessionController::class, 'respond']);
+
+    Route::post('/software-interactions/{interaction}/respond', [SoftwareInterationsController::class, 'respond']);
+    Route::apiResource('software-interactions', SoftwareInterationsController::class);
+    Route::get('/software/users-open-sessions', [SoftwareInterationsController::class, 'usersWithOpenSessions']);
 });
 
 

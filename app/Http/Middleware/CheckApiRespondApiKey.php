@@ -35,7 +35,6 @@ class CheckApiRespondApiKey
         // 2) Header presente pero inválido
         $expected = (string) config('app.API_RESPONSE_KEY', '');
         $provided = (string) $request->header('Api-Respond-Key', '');
-
         // Evita timing attacks
         $valid = ($expected !== '' && hash_equals($expected, $provided));
 
