@@ -24,13 +24,51 @@ class AssistantController extends Controller
         $perPage    = $this->getPerPage($request);
         $searchTerm = $this->getSearchTerm($request);
 
-        $query = Assistant::query()
-            ->where('user_id', $request->user()->id)
-            ->orderBy('date_creation', 'desc');
-
-        if ($searchTerm !== null) {
-            $query->where('name', 'ilike', '%' . $searchTerm . '%');
+        // Validar filtros adicionales (ligero y seguro)
+        $v = \Validator::make($request->query(), [
+            'state'         => 'sometimes|string',                 // CSV permitido: "neutral,active"
+            'created_from'  => 'sometimes|date',
+            'created_to'    => 'sometimes|date',
+            'sort_by'       => 'sometimes|in:date_creation,name',
+            'sort_dir'      => 'sometimes|in:asc,desc',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         }
+
+        $sortBy  = $request->query('sort_by',  'date_creation');
+        $sortDir = $request->query('sort_dir', 'desc');
+
+        $query = Assistant::query()
+            ->where('user_id', $request->user()->id);
+
+        // Búsqueda por nombre o estado (ILIKE) y también por id exacto
+        if ($searchTerm !== null) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name',  'ilike', '%'.$searchTerm.'%')
+                ->orWhere('state','ilike', '%'.$searchTerm.'%')
+                ->orWhere('id', $searchTerm); // match exacto por UUID si lo pasan
+            });
+        }
+
+        // Filtrado por uno o varios estados (CSV)
+        if ($request->filled('state')) {
+            $states = array_filter(array_map('trim', explode(',', (string) $request->query('state'))));
+            if (!empty($states)) {
+                $query->whereIn('state', $states);
+            }
+        }
+
+        // Rango por fecha de creación
+        if ($request->filled('created_from')) {
+            $query->where('date_creation', '>=', $request->query('created_from'));
+        }
+        if ($request->filled('created_to')) {
+            $query->where('date_creation', '<=', $request->query('created_to'));
+        }
+
+        // Orden (por defecto: date_creation DESC)
+        $query->orderBy($sortBy, $sortDir);
 
         $paginator = $query->paginate($perPage)->withQueryString();
 
@@ -38,6 +76,7 @@ class AssistantController extends Controller
             (new AssistantCollection($paginator))->toArray($request)
         );
     }
+
 
     // POST /assistants
     public function store(Request $request): JsonResponse

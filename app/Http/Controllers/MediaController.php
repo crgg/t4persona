@@ -64,12 +64,18 @@ class MediaController extends Controller
     // POST /media  (multipart/form-data)
     public function store(Request $request): JsonResponse
     {
+        // Bloquear campos que son exclusivos del software
+        if ($request->hasAny(['transcription','metadata','storage_url'])) {
+            return response()->json([
+                'status' => false,
+                'errors' => ['payload' => ['Fields transcription/metadata/storage_url are software-only']],
+            ], 422);
+        }
+
         $validator = Validator::make($request->all(), [
             'assistant_id'  => ['required','uuid', Rule::exists('assistants','id')],
             'type'          => ['required', Rule::in(['audio','video','image','text'])],
             'file'          => ['required','file','max:'.self::MAX_FILE_KB],
-            'transcription' => ['nullable','string'],
-            'metadata'      => ['nullable','array'],
         ]);
 
         if ($validator->fails()) {
@@ -87,7 +93,6 @@ class MediaController extends Controller
         $fileName = preg_replace('/\s+/', '_', $file->getClientOriginalName());
         $key = 'assistants/'.$assistant->id.'/media/'.(string) Str::uuid().'-'.$fileName;
 
-
         Storage::disk('s3')->putFileAs(
             dirname($key),
             $file,
@@ -97,20 +102,21 @@ class MediaController extends Controller
                 'ContentType' => $file->getClientMimeType() ?: $file->getMimeType(),
             ]
         );
-        // URL pública normal directamente del disk S3
+
         $publicUrl = Storage::disk('s3')->url($key);
 
-        do {
-            $id = (string) Str::uuid();
-        } while (Media::whereKey($id)->exists());
+        // Generar UUID único
+        do { $id = (string) Str::uuid(); } while (Media::whereKey($id)->exists());
 
         $media               = new Media();
-        $media->id           = $id;        // ← GENERAR UUID AQUÍ
+        $media->id           = $id;
         $media->assistant_id = $assistant->id;
         $media->type         = $data['type'];
         $media->storage_url  = $publicUrl;
-        $media->transcription= $data['transcription'] ?? null;
-        $media->metadata     = $data['metadata'] ?? null;
+        // Estos los gestiona SOLO el software:
+        $media->transcription= null;
+        $media->metadata     = null;
+
         $media->date_upload  = now();
         $media->save();
 
@@ -122,7 +128,7 @@ class MediaController extends Controller
     }
 
     // GET /media/{media}
-    public function show(Request $request,  $media): JsonResponse
+    public function show(Request $request, $media): JsonResponse
     {
         $media = Media::where('id',$media)->first();
         if(!$media){
@@ -141,67 +147,13 @@ class MediaController extends Controller
         ]);
     }
 
-    // PUT/PATCH /media/{media}
+    // PUT/PATCH /media/{media}  → no permitido para usuarios
     public function update(Request $request, Media $media): JsonResponse
     {
-
         return response()->json([
             'status' => false,
             'msg'    => 'Only delete the media',
-        ], 404);
-
-        /*
-        $this->assertMediaOwner($request, $media);
-
-        $validator = Validator::make($request->all(), [
-            'type'          => ['sometimes', Rule::in(['audio','video','image','text'])],
-            'file'          => ['sometimes','file','max:'.self::MAX_FILE_KB],
-            'transcription' => ['nullable','string'],
-            'metadata'      => ['nullable','array'],
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['status'=>false,'errors'=>$validator->errors()], 422);
-        }
-
-        $data = $validator->validated();
-
-        if ($request->hasFile('file')) {
-            // borrar anterior (si podemos derivar la key desde la URL)
-            $oldKey = $this->keyFromUrl($media->storage_url);
-            if ($oldKey && Storage::disk('s3')->exists($oldKey)) {
-                Storage::disk('s3')->delete($oldKey);
-            }
-
-            $file = $request->file('file');
-            $fileName = preg_replace('/\s+/', '_', $file->getClientOriginalName());
-            $newKey   = 'assistants/'.$media->assistant_id.'/media/'.(string) Str::uuid().'-'.$fileName;
-
-            Storage::disk('s3')->putFileAs(
-                dirname($newKey),
-                $file,
-                basename($newKey),
-                [
-                    'visibility'  => 'public',
-                    'ContentType' => $file->getClientMimeType() ?: $file->getMimeType(),
-                ]
-            );
-
-            $media->storage_url = Storage::disk('s3')->url($newKey);
-        }
-
-        if (array_key_exists('type', $data))          { $media->type = $data['type']; }
-        if (array_key_exists('transcription', $data)) { $media->transcription = $data['transcription']; }
-        if (array_key_exists('metadata', $data))      { $media->metadata = $data['metadata']; }
-
-        $media->save();
-
-        return response()->json([
-            'status' => true,
-            'msg'    => 'Updated',
-            'data'   => $this->presentMedia($media),
-        ]);
-        */
+        ], 405); // Method Not Allowed
     }
 
     // DELETE /media/{media}
@@ -247,7 +199,6 @@ class MediaController extends Controller
     {
         if (!is_string($url) || $url === '') return null;
 
-        // Si configuraste 'url' en el disk S3 (S3_BASE_URL)
         $base = rtrim((string) config('filesystems.disks.s3.url', ''), '/');
         if ($base !== '' && str_starts_with($url, $base . '/')) {
             return ltrim(substr($url, strlen($base)), '/');
@@ -257,12 +208,8 @@ class MediaController extends Controller
         $host   = parse_url($url, PHP_URL_HOST) ?? '';
         $path   = ltrim((string) parse_url($url, PHP_URL_PATH), '/');
 
-        if ($bucket !== '' && str_starts_with($host, $bucket . '.s3.')) {
-            return $path;
-        }
-        if ($bucket !== '' && str_starts_with($path, $bucket . '/')) {
-            return substr($path, strlen($bucket) + 1);
-        }
+        if ($bucket !== '' && str_starts_with($host, $bucket . '.s3.')) return $path;
+        if ($bucket !== '' && str_starts_with($path, $bucket . '/'))   return substr($path, strlen($bucket) + 1);
 
         return $path;
     }

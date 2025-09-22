@@ -8,6 +8,7 @@ use App\Models\Interaction;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Resources\InteractionResource;
 use App\Http\Resources\InteractionCollection;
@@ -156,57 +157,95 @@ class SoftwareInterationsController extends Controller
 
     public function usersWithOpenSessions(Request $request): JsonResponse
     {
-        // Traer todas las sesiones ABiertas y su owner (via assistants.user_id)
-        $rows = GeneratedSession::query()
-            ->select('sessions.*', 'assistants.user_id')
+        // Paginación por usuarios
+        $perPage = (int) ($request->query('per_page') ?? 25);
+        if ($perPage < 1)   $perPage = 1;
+        if ($perPage > 200) $perPage = 200;
+        $page = (int) ($request->query('page') ?? 1);
+        if ($page < 1) $page = 1;
+
+        // Agrupado por usuario: contar sesiones abiertas y ordenar por la última fecha de inicio
+        $agg = DB::table('sessions')
             ->join('assistants', 'assistants.id', '=', 'sessions.assistant_id')
             ->whereNull('sessions.date_end')
-            ->orderBy('sessions.id', 'desc')
-            ->get();
+            ->groupBy('assistants.user_id')
+            ->select(
+                'assistants.user_id',
+                DB::raw('COUNT(*) AS open_sessions_count'),
+                DB::raw('MAX(sessions.date_start) AS last_opened_at') // usar fecha, no UUID
+            )
+            ->orderByDesc('last_opened_at');
 
-        if ($rows->isEmpty()) {
+        $paginator = $agg->paginate($perPage, ['*'], 'page', $page);
+
+        if ($paginator->isEmpty()) {
             return response()->json([
-                'status' => true,
-                'msg'    => 'OK',
+                'status'      => true,
+                'msg'         => 'OK',
                 'count_users' => 0,
-                'data'   => [],
+                'data'        => [],
+                'pagination'  => [
+                    'total'  => 0,
+                    'count'        => 0,
+                    'per_page'     => $perPage,
+                    'current_page' => $paginator->currentPage(),
+                    'total_pages'  => 0,
+                ],
             ]);
         }
 
-        // Agrupar por owner user_id
-        $byUser = $rows->groupBy('user_id');
+        // Usuarios de la página actual
+        $pageUserIds = collect($paginator->items())->pluck('user_id')->values();
+        $users = \App\Models\User::whereIn('id', $pageUserIds)->get()->keyBy('id');
 
-        // Traer datos básicos de los usuarios
-        $users = User::whereIn('id', $byUser->keys())->get()->keyBy('id');
+        // Sesiones abiertas de esos usuarios (sin tocar UUID con funciones)
+        $sessionsByUser = DB::table('sessions')
+            ->join('assistants', 'assistants.id', '=', 'sessions.assistant_id')
+            ->whereNull('sessions.date_end')
+            ->whereIn('assistants.user_id', $pageUserIds)
+            ->orderBy('sessions.date_start', 'desc')
+            ->select('sessions.*', 'assistants.user_id')
+            ->get()
+            ->groupBy('user_id');
 
         // Armar respuesta
         $data = [];
-        foreach ($byUser as $userId => $sessions) {
-            $u = $users->get($userId);
+        foreach ($paginator->items() as $row) {
+            $uid = (int) $row->user_id;
+            $u   = $users->get($uid);
+
+            $list = ($sessionsByUser->get($uid) ?? collect())->values()->map(function ($s) {
+                return [
+                    'id'           => $s->id,            // UUID
+                    'assistant_id' => $s->assistant_id,  // UUID
+                    'date_start'   => $s->date_start,    // timestamp
+                    'date_end'     => $s->date_end,      // null (abierta)
+                ];
+            })->all();
 
             $data[] = [
                 'user' => [
-                    'id'    => (int) $userId,
+                    'id'    => $uid,
                     'name'  => $u?->name,
                     'email' => $u?->email,
                 ],
-                'open_sessions_count' => $sessions->count(),
-                'open_sessions' => $sessions->values()->map(function ($s) {
-                    return [
-                        'id'           => $s->id,
-                        'assistant_id' => $s->assistant_id,
-                        'date_start'   => $s->date_start ?? null,
-                        'date_end'     => $s->date_end
-                    ];
-                }),
+                'open_sessions_count' => (int) $row->open_sessions_count,
+                'open_sessions'       => $list,
             ];
         }
 
         return response()->json([
-            'status' => true,
-            'msg'    => 'OK',
+            'status'      => true,
+            'msg'         => 'OK',
             'count_users' => count($data),
-            'data'   => $data,
+            'data'        => $data,
+            'pagination'  => [
+                'total'  => $paginator->total(),
+                'count'        => $paginator->count(),
+                'per_page'     => $paginator->perPage(),
+                'current_page' => $paginator->currentPage(),
+                'total_pages'  => $paginator->lastPage(),
+            ],
         ]);
     }
 

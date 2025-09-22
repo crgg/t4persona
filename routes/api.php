@@ -4,9 +4,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\AnswerController;
 use App\Http\Controllers\SessionController;
+use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\InteractionController;
+use App\Http\Controllers\SoftwareMediaController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\SoftwareInterationsController;
 
@@ -55,6 +58,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/interactions/cancel-last',          [InteractionController::class, 'cancelLast']);  // cancelar la ultima pendiente por sesión
     });
 
+    Route::get('/assistant-questions', [QuestionController::class, 'index']);
+    Route::post('/assistant-answers', [AnswerController::class, 'store']);
+
 });
 
 Route::middleware('software.respond_api_token')->group(function () {
@@ -62,6 +68,13 @@ Route::middleware('software.respond_api_token')->group(function () {
     Route::post('/software-interactions/{interaction}/respond', [SoftwareInterationsController::class, 'respond']);
     Route::apiResource('software-interactions', SoftwareInterationsController::class);
     Route::get('/software/users-open-sessions', [SoftwareInterationsController::class, 'usersWithOpenSessions']);
+
+    Route::get('/software-media',                 [SoftwareMediaController::class, 'index']);
+    Route::get('/software-media/{media}',         [SoftwareMediaController::class, 'show']);
+    Route::patch('/software-media/{media}/enrich',[SoftwareMediaController::class, 'enrich']);
+
+
+
 });
 
 
