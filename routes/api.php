@@ -80,7 +80,5 @@ Route::middleware('software.respond_api_token')->group(function () {
 
 
 
-// Email verify con URL firmada
-Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
-    ->name('verification.verify')
-    ->middleware('signed');
+Route::get('email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+    ->name('verification.verify');
