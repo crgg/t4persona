@@ -19,7 +19,7 @@ class UserController extends Controller
 
         $validator = \Validator::make($request->all(),
             [
-                'name'     => ['sometimes','nullable','string','max:150'],
+                'name'     => ['sometimes','string','max:150'],
                 'age'      => ['sometimes','nullable','integer','min:15'],
                 'alias'    => ['sometimes','nullable','string','max:150'],
                 'country'  => ['sometimes','nullable','string','max:100'],

@@ -48,6 +48,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/upload-avatar-picture', [UserController::class, 'upload_avatar_picture']);
 
     Route::middleware(['email.verified'])->group(function () {
+    });
 
         Route::apiResources([
             'assistants'   => AssistantController::class,
@@ -64,7 +65,6 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/interactions/was-canceled', [InteractionController::class, 'wasCanceled']);
         Route::post('/interactions/{interaction}/cancel', [InteractionController::class, 'cancel']);      // cancelar por ID
         Route::post('/interactions/cancel-last',          [InteractionController::class, 'cancelLast']);  // cancelar la ultima pendiente por sesión
-    });
 
     Route::get('/assistant-questions', [QuestionController::class, 'index']);
     Route::post('/assistant-answers', [AnswerController::class, 'store']);
