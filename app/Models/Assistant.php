@@ -19,11 +19,18 @@ class Assistant extends Model
         'name',
         'state',
         'base_personality',
+        'age',
+        'avatar_path',
+        'family_relationship',
+        'alias',
+        'country',
+        'language'
     ];
 
     protected $casts = [
         'base_personality' => 'array',
         'date_creation'    => 'immutable_datetime',
+        'age'    => 'integer',
     ];
 
     // Relaciones

@@ -3,20 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\Assistant;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
-use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\AssistantResource;
+use Illuminate\Support\Facades\Validator;
 use App\Http\Resources\AssistantCollection;
+use App\Http\Resources\AssistantMiniResource;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class AssistantController extends Controller
 {
     private const DEFAULT_PER_PAGE = 15;
     private const MAX_PER_PAGE     = 100;
+    private const MAX_FILE_KB      = 102400; // 100MB
 
     // GET /assistants
     public function index(Request $request): JsonResponse
@@ -92,6 +95,15 @@ class AssistantController extends Controller
             ],
             'state'            => 'sometimes|string|max:20',
             'base_personality' => 'nullable|array',
+
+
+            'age' => 'required|integer',
+            //'avatar_path',
+            'family_relationship' => 'nullable|string',
+            'alias'     => 'nullable|string',
+            'country'   => 'nullable|string',
+            'language'  => 'nullable|string'
+
         ]);
 
         if ($validator->fails()) {
@@ -158,6 +170,12 @@ class AssistantController extends Controller
             ],
             'state'            => 'sometimes|string|max:20',
             'base_personality' => 'nullable|array',
+            'age' => 'sometimes|integer|min:15',
+            //'avatar_path',
+            'family_relationship' => 'sometimes|string',
+            'alias'     => 'sometimes|string',
+            'country'   => 'sometimes|string',
+            'language'  => 'sometimes|string'
         ]);
 
         if ($validator->fails()) {
@@ -306,4 +324,64 @@ class AssistantController extends Controller
 
         return $assistant;
     }
+
+        // POST /media  (multipart/form-data)
+    public function set_assistant_avatar(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'assistant_id' => ['required','uuid', Rule::exists('assistants','id')],
+            'file'         => ['required','file','max:'.self::MAX_FILE_KB, 'image'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status'=>false,'errors'=>$validator->errors()], 422);
+        }
+        $data = $validator->validated();
+
+        $assistant = Assistant::findOrFail($data['assistant_id']);
+        $this->assertMediaOwnerByAssistant($request, $assistant);
+
+        $file = $request->file('file');
+
+        $fileName = preg_replace('/\s+/', '_', $file->getClientOriginalName());
+
+        $key = 'assistants/'.$assistant->id.'/avatar/'.(string) Str::uuid().'-'.$fileName;
+
+        if(isset($assistant->avatar_path) ){
+            if(Storage::disk('s3')->exists( $assistant->avatar_path )){
+                Storage::disk('s3')->delete( $assistant->avatar_path );
+            }
+        }
+
+        Storage::disk('s3')->putFileAs(
+            dirname($key),
+            $file,
+            basename($key),
+            [
+                'visibility'  => 'public',
+                'ContentType' => $file->getClientMimeType() ?: $file->getMimeType(),
+            ]
+        );
+
+
+        $assistant->avatar_path = $key;
+        $assistant->save();
+        $assistant->refresh();
+
+        return response()->json([
+            'status' => true,
+            'msg'    => 'Avatar stored',
+            'data'   => AssistantMiniResource::make( $assistant ),
+        ], 201);
+    }
+
+    private function assertMediaOwnerByAssistant(Request $request, Assistant $assistant): void
+    {
+        if ((int) $assistant->user_id !== (int) $request->user()->id) {
+            throw new HttpResponseException(
+                response()->json(['status'=>false,'errors'=>['authorization'=>['Forbidden']]], 403)
+            );
+        }
+    }
+
 }

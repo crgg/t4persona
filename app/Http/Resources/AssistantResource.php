@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 
@@ -91,6 +92,12 @@ class AssistantResource extends JsonResource
             'user_id'          => $this->user_id,
             'name'             => $this->name,
             'state'            => $this->state,
+            'age'              => $this->age,
+            'avatar_path'      =>  isset($this->avatar_path) ?  Storage::disk('s3')->url($this->avatar_path) : $this->avatar_path,
+            'family_relationship'  => $this->family_relationship,
+            'alias'             => $this->alias,
+            'country'           => $this->country,
+            'language'          => $this->language,
             'base_personality' => $this->base_personality,
             'date_creation'    => $this->date_creation?->toIso8601String(),
 

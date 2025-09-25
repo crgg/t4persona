@@ -26,7 +26,12 @@ class User extends Authenticatable
         'password_hash',
         'rol',
         'date_register',
-        'last_login'
+        'last_login',
+        'age',
+        'avatar_path',
+        'alias',
+        'country',
+        'language',
     ];
 
     /**

@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\AnswerController;
 use App\Http\Controllers\SessionController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\InteractionController;
 use App\Http\Controllers\SoftwareMediaController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\SoftwareInterationsController;
+use App\Http\Controllers\WhatsappConversationZipController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,12 +43,18 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/email/resend', [EmailVerificationController::class, 'resend']);
     Route::get('/auth/user',      [AuthController::class, 'user']);
 
+    Route::post('/update-user-info', [UserController::class, 'update_user_info']);
+    Route::post('/change-password',  [UserController::class, 'change_password']);
+    Route::post('/upload-avatar-picture', [UserController::class, 'upload_avatar_picture']);
+
     Route::middleware(['email.verified'])->group(function () {
 
         Route::apiResources([
             'assistants'   => AssistantController::class,
             'media'        => MediaController::class
         ]);
+        Route::post('/set-assistant-avatar', [AssistantController::class, 'set_assistant_avatar']);
+        Route::post('/store-whatsapp-conversation', [WhatsappConversationZipController::class, 'store_whatsapp_zip']);
 
         Route::apiResource('interactions', InteractionController::class)->except(['update']);
 

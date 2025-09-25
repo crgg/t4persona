@@ -19,6 +19,8 @@ class Media extends Model
         'storage_url',
         'transcription',
         'metadata',
+        'extra_fields',
+        'extra_fields_two',
         'date_upload',
     ];
 

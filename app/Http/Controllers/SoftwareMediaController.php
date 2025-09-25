@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Media;
 use App\Models\Assistant;
+use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class SoftwareMediaController extends Controller
 {
@@ -83,54 +84,85 @@ class SoftwareMediaController extends Controller
 
     // PATCH /software-media/{media}/enrich
     // Solo agrega/actualiza transcription y/o metadata. No toca archivo ni storage_url.
+
     public function enrich(Request $request, string $mediaId): JsonResponse
     {
-        $m = Media::where('id',$mediaId)->first();
-        if (!$m) {
-            return response()->json(['status'=>false,'msg'=>'Media Not Exists'], 404);
-        }
+        $m = Media::where('id', $mediaId)->first();
+        if (!$m) return response()->json(['status'=>false,'msg'=>'Media Not Exists'], 404);
 
         $v = Validator::make($request->all(), [
-            'transcription' => ['nullable','string'],
-            'metadata'      => ['nullable','array'],
-            'merge'         => ['sometimes','boolean'], // si true, fusiona metadata
+            'transcription'          => ['nullable','string'],
+
+            // always arrays for add/merge
+            'metadata'               => ['sometimes','array'],
+            'extra_fields'           => ['sometimes','array'],
+            'extra_fields_two'       => ['sometimes','array'],
+
+            // per-field delete lists (arrays of strings: dot-notation supported)
+            'metadata_delete'        => ['sometimes','array'],
+            'extra_fields_delete'    => ['sometimes','array'],
+            'extra_fields_two_delete'=> ['sometimes','array'],
         ]);
         if ($v->fails()) {
             return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         }
-
         $data = $v->validated();
 
-        // Reglas: debe venir al menos transcription o metadata
-        $hasTrans = array_key_exists('transcription', $data);
-        $hasMeta  = array_key_exists('metadata', $data);
-        if (!$hasTrans && !$hasMeta) {
-            return response()->json([
-                'status'=>false,
-                'errors'=>['payload'=>['Provide transcription or metadata']],
-            ], 422);
+        // Must have at least one meaningful input
+        $hasTrans = isset($data['transcription']) && $data['transcription'] !== '';
+        $hasAdds  = isset($data['metadata']) || isset($data['extra_fields']) || isset($data['extra_fields_two']);
+        $hasDels  = isset($data['metadata_delete']) || isset($data['extra_fields_delete']) || isset($data['extra_fields_two_delete']);
+        if (!$hasTrans && !$hasAdds && !$hasDels) {
+            return response()->json(['status'=>false,'errors'=>['payload'=>['Provide transcription or add/delete arrays']]], 422);
         }
+
+        // Deep merge helper
+        $deepMerge = fn(array $base, array $incoming) => array_replace_recursive($base, $incoming);
 
         if ($hasTrans) {
             $m->transcription = $data['transcription'];
         }
 
-        if ($hasMeta) {
-            if ($request->boolean('merge') && is_array($m->metadata)) {
-                $m->metadata = array_replace_recursive((array) $m->metadata, (array) $data['metadata']);
-            } else {
-                $m->metadata = $data['metadata']; // reemplazo completo
-            }
+        // ===== ADD / MERGE (replace keys if they exist) =====
+        if (array_key_exists('metadata', $data)) {
+            $current        = is_array($m->metadata) ? $m->metadata : (array) $m->metadata;
+            $m->metadata    = $deepMerge($current, $data['metadata']);
+        }
+        if (array_key_exists('extra_fields', $data)) {
+            $current        = is_array($m->extra_fields) ? $m->extra_fields : (array) $m->extra_fields;
+            $m->extra_fields= $deepMerge($current, $data['extra_fields']);
+        }
+        if (array_key_exists('extra_fields_two', $data)) {
+            $current            = is_array($m->extra_fields_two) ? $m->extra_fields_two : (array) $m->extra_fields_two;
+            $m->extra_fields_two= $deepMerge($current, $data['extra_fields_two']);
+        }
+
+        // ===== DELETE (dot-notation) =====
+        if (!empty($data['metadata_delete'])) {
+            $arr = is_array($m->metadata) ? $m->metadata : (array) $m->metadata;
+            foreach ($data['metadata_delete'] as $path) { Arr::forget($arr, (string) $path); }
+            $m->metadata = $arr;
+        }
+        if (!empty($data['extra_fields_delete'])) {
+            $arr = is_array($m->extra_fields) ? $m->extra_fields : (array) $m->extra_fields;
+            foreach ($data['extra_fields_delete'] as $path) { Arr::forget($arr, (string) $path); }
+            $m->extra_fields = $arr;
+        }
+        if (!empty($data['extra_fields_two_delete'])) {
+            $arr = is_array($m->extra_fields_two) ? $m->extra_fields_two : (array) $m->extra_fields_two;
+            foreach ($data['extra_fields_two_delete'] as $path) { Arr::forget($arr, (string) $path); }
+            $m->extra_fields_two = $arr;
         }
 
         $m->save();
 
         return response()->json([
-            'status'=>true,
-            'msg'   =>'Enriched',
-            'data'  => $this->presentMedia($m),
+            'status' => true,
+            'msg'    => 'Enriched',
+            'data'   => $this->presentMedia($m),
         ]);
     }
+
 
     // ---------- Helpers ----------
 
