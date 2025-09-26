@@ -25,4 +25,5 @@ class WhatsappConversation extends Model
         'metadata'     => 'array',
     ];
 
+
 }

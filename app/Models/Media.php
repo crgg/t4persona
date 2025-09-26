@@ -22,6 +22,7 @@ class Media extends Model
         'extra_fields',
         'extra_fields_two',
         'date_upload',
+        'whatsapp_media_file_id'
     ];
 
     protected $casts = [

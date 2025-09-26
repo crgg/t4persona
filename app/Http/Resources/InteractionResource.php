@@ -19,6 +19,7 @@ class InteractionResource extends JsonResource
             'timestamp'                => $this->timestamp,
             'has_response'             => (bool) $this->has_response,
             'was_canceled'             => (bool) $this->was_canceled,
+            'file_uuid'                => (bool) $this->file_uuid,
         ];
     }
 }

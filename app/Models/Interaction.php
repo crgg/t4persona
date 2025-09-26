@@ -20,6 +20,7 @@ class Interaction extends Model
         'assistant_audio_response',
         'emotion_deteted',    // (tal cual está escrito en el doc)
         'timestamp',
+        'file_uuid',
     ];
 
     protected $casts = [

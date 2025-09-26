@@ -56,6 +56,10 @@ Route::middleware('auth:api')->group(function () {
         ]);
         Route::post('/set-assistant-avatar', [AssistantController::class, 'set_assistant_avatar']);
         Route::post('/store-whatsapp-conversation', [WhatsappConversationZipController::class, 'store_whatsapp_zip']);
+        Route::get    ('/whatsapp-conversations',        [WhatsappConversationZipController::class, 'index']);
+        Route::get    ('/whatsapp-conversations/{id}',   [WhatsappConversationZipController::class, 'show']);
+        Route::delete ('/whatsapp-conversations/{id}',   [WhatsappConversationZipController::class, 'destroy']);
+
 
         Route::apiResource('interactions', InteractionController::class)->except(['update']);
 

@@ -83,6 +83,7 @@ class SoftwareInterationsController extends Controller
             'assistant_audio_file'     => ['sometimes','file','max:'.self::MAX_FILE_KB,
                                            'mimetypes:audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a'],
             'emotion_deteted'          => ['nullable','string','max:100'],
+            'file_uuid'          => ['nullable','string','max:100'],
         ]);
         if ($v->fails()) return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         $data = $v->validated();
