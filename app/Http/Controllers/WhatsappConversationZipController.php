@@ -235,7 +235,7 @@ class WhatsappConversationZipController extends Controller
     {
         $wc = WhatsappConversation::findOrFail($id);
 
-        // Build a direct/temporary URL to download the original ZIP (best effort)
+        // URL del ZIP (best-effort)
         $zipUrl = null;
         try {
             if (method_exists(Storage::disk('s3'), 'temporaryUrl')) {
@@ -247,32 +247,21 @@ class WhatsappConversationZipController extends Controller
             $zipUrl = null;
         }
 
-        // Return FULL raw text only — no parsing
+        // Texto COMPLETO sin parsear
         $raw = $wc->conversation;
         if (!is_string($raw)) {
-            // If stored as array/object, return as JSON text (unescaped, no parsing)
             $raw = json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
-        $bytes = function_exists('mb_strlen')
-            ? mb_strlen($raw ?? '', '8bit')
-            : strlen($raw ?? '');
+        // Usa tu Resource (trae media paginado con ?media_page=&media_per_page=)
+        // y luego añade text/byte_size/zip_download para que se muestren siempre.
+        $data = (new \App\Http\Resources\WhatsappConversationResource($wc))
+            ->toArray($request);
+
 
         return response()->json([
             'status' => true,
-            'data'   => [
-                'id'           => (string) $wc->id,
-                'assistant_id' => (string) $wc->assistant_id,
-                'zip_aws_path' => $wc->zip_aws_path,
-                'zip_download' => $zipUrl,
-                'metadata'     => $wc->metadata ?? [],
-                'created_at'   => optional($wc->created_at)->toIso8601String(),
-                'updated_at'   => optional($wc->updated_at)->toIso8601String(),
-
-                // 🔥 Texto COMPLETO sin parsear
-                'text'         => $raw,
-                'byte_size'    => $bytes,
-            ],
+            'data'   => $data,
         ]);
     }
 
