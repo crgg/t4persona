@@ -209,7 +209,7 @@ class WhatsappConversationZipController extends Controller
     public function index(Request $request): JsonResponse
     {
         $v = \Validator::make($request->all(), [
-            'assistant_id' => ['sometimes','uuid', Rule::exists('assistants','id')],
+            'assistant_id' => ['required','uuid', Rule::exists('assistants','id')],
             'per_page'     => ['sometimes','integer','min:1','max:200'],
             'page'         => ['sometimes','integer','min:1'],
         ]);
@@ -218,11 +218,11 @@ class WhatsappConversationZipController extends Controller
             return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         }
 
-        $q = WhatsappConversation::query()->orderByDesc('created_at');
+        $assistantId = $request->input('assistant_id');
 
-        if ($request->filled('assistant_id')) {
-            $q->where('assistant_id', $request->assistant_id);
-        }
+        $q = WhatsappConversation::query()
+            ->where('assistant_id', $assistantId)
+            ->orderByDesc('created_at');
 
         $perPage = (int) $request->get('per_page', 25);
         $items   = $q->paginate($perPage);
