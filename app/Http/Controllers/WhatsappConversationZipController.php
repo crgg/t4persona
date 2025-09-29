@@ -18,62 +18,137 @@ use App\Http\Resources\WhatsappConversationCollection;
 class WhatsappConversationZipController extends Controller
 {
 
+    public const MAX_UPLOAD_BYTES   = 500 * 1024 * 1024; // 500 MB (raw uploaded ZIP)
+    public const MAX_FILES          = 2000;              // entries in the archive
+    public const MAX_TOTAL_UNCOMP   = 200 * 1024 * 1024; // 200 MB uncompressed sum
+    public const MAX_FILE_BYTES     = 25  * 1024 * 1024; // 25 MB per file
+
+    // Deny by extension (final extension)
+    public const DENY_EXT = [
+        'exe','dll','com','msi','msp','bat','cmd','sh','ps1','vbs','js','jse','mjs',
+        'php','phtml','phar','pl','py','rb','cgi','jar','class','war','apk','ipa',
+        'dmg','so','dylib','sys','scr','reg','wasm','lnk'
+    ];
+
+    // Deny by MIME (prefix/families)
+    public const DENY_MIME_PREFIX = [
+        'application/x-msdownload',
+        'application/x-dosexec',
+        'application/x-executable',
+        'application/x-sh',
+        'application/x-bat',
+        'application/x-msi',
+        'application/java-archive',
+        'application/vnd.android.package-archive',
+        'application/x-mach-binary',
+        'application/wasm',
+        'text/javascript',
+        'application/javascript',
+        'application/x-php',
+    ];
+
+    // Allow lists
+    public const ALLOW_SAFE_MIME_PREFIX = ['image/','video/','audio/','text/'];
+    public const ALLOW_SAFE_SINGLE      = ['application/pdf','application/json','application/xml','text/csv','text/vtt','text/srt'];
+    public const ALLOW_SAFE_EXT         = [
+        'jpg','jpeg','png','gif','webp','heic','bmp',
+        'mp4','mov','m4v','webm',
+        'mp3','wav','ogg','opus','m4a',
+        'txt','log','json','csv','srt','vtt','md','pdf','xml','svg'
+    ];
+
+    // Junk to ignore
+    public const IGNORE_NAMES = ['__MACOSX/', '.DS_Store', 'Thumbs.db'];
+
+
+    /**
+     * Create WhatsApp conversation by uploading a ZIP with _chat.txt + media.
+     * - 500 MB upload cap
+     * - Blocks executables/scripts
+     * - Anti zip-bomb (entries, per-file size, total uncompressed)
+     * - Blocks traversal, nested ZIPs, double extensions, SVG with scripts
+     * - Returns Resource + meta
+     */
     public function store_whatsapp_zip(Request $request): JsonResponse
     {
+        // 1) Initial validation (ZIP + 500MB cap via KB rule)
         $v = \Validator::make($request->all(), [
             'assistant_id' => ['required','uuid', Rule::exists('assistants','id')],
-            'file'         => ['required','file','mimes:zip','mimetypes:application/zip,application/x-zip-compressed'],
+            'file'         => ['required','file','mimes:zip','mimetypes:application/zip,application/x-zip-compressed','max:512000'], // 500 MB in KB
         ]);
         if ($v->fails()) {
             return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         }
         $data = $v->validated();
 
-        $assistant = Assistant::findOrFail($data['assistant_id']);
-
         /** @var UploadedFile $file */
         $file    = $request->file('file');
         $tmpPath = $file->getRealPath();
 
-        // --- open ZIP and find _chat.txt ---
+        // 2) Extra guard in bytes (covers edge cases where php.ini limits are bypassed)
+        $sizeBytes = $file->getSize() ?? (@filesize($tmpPath) ?: 0);
+        if ($sizeBytes <= 0 || $sizeBytes > self::MAX_UPLOAD_BYTES) {
+            return response()->json([
+                'status' => false,
+                'errors' => ['file' => ['ZIP exceeds 500MB limit or size is unreadable']]
+            ], 422);
+        }
+
+        // 3) Load assistant
+        $assistant = Assistant::findOrFail($data['assistant_id']);
+
+        // 4) Open ZIP
         $zip = new ZipArchive();
         if ($zip->open($tmpPath) !== true) {
             return response()->json(['status'=>false,'errors'=>['file'=>['_zip open failed']]], 422);
         }
-        $chatIndex = -1;
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            $ln   = strtolower($name);
-            if ($ln === '_chat.txt' || str_ends_with($ln, '/_chat.txt')) { $chatIndex = $i; break; }
+
+        // 5) Find _chat.txt and enforce anti zip-bomb global caps
+        $chatIndex  = -1;
+        $numFiles   = $zip->numFiles;
+        $totalUncmp = 0;
+
+        if ($numFiles > self::MAX_FILES) {
+            $zip->close();
+            return response()->json(['status'=>false,'errors'=>['file'=>['ZIP has too many entries']]], 422);
         }
+
+        for ($i = 0; $i < $numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            if (!$stat) continue;
+
+            $totalUncmp += (int)($stat['size'] ?? 0);
+            if ($totalUncmp > self::MAX_TOTAL_UNCOMP) {
+                $zip->close();
+                return response()->json(['status'=>false,'errors'=>['file'=>['ZIP uncompressed size too large']]], 422);
+            }
+
+            $name = strtolower($stat['name'] ?? '');
+            if ($name === '_chat.txt' || str_ends_with($name, '/_chat.txt')) {
+                $chatIndex = $i;
+            }
+        }
+
         if ($chatIndex === -1) {
             $zip->close();
             return response()->json(['status'=>false,'errors'=>['file'=>['ZIP must include _chat.txt']]], 422);
         }
+
+        // 6) Read and normalize conversation
         $chat = $zip->getFromIndex($chatIndex);
         if ($chat === false) {
             $zip->close();
             return response()->json(['status'=>false,'errors'=>['file'=>['Unable to read _chat.txt']]], 422);
         }
-
-        // --- normalize to UTF-8 ---
         $enc = mb_detect_encoding($chat, ['UTF-8','UTF-16','UTF-16LE','UTF-16BE','ISO-8859-1','Windows-1252'], true);
         if ($enc && $enc !== 'UTF-8') { $chat = mb_convert_encoding($chat, 'UTF-8', $enc); }
         if (substr($chat, 0, 3) === "\xEF\xBB\xBF") { $chat = substr($chat, 3); }
 
-        // --- upload ZIP to S3 (original) ---
+        // 7) Persist conversation (raw ZIP upload is optional; keep disabled/private if used)
         $fileName = preg_replace('/\s+/', '_', $file->getClientOriginalName());
         $baseDir  = 'assistants/'.$assistant->id.'/whatsapp_conversation';
         $zipKey   = $baseDir.'/'.(string) Str::uuid().'-'.$fileName;
 
-        Storage::disk('s3')->putFileAs(
-            dirname($zipKey),
-            $file,
-            basename($zipKey),
-            ['visibility'=>'public', 'ContentType'=>$file->getClientMimeType() ?: $file->getMimeType()]
-        );
-
-        // --- create conversation row ---
         $metadata = [
             'source'         => 'whatsapp_zip',
             'zip_original'   => $file->getClientOriginalName(),
@@ -82,129 +157,255 @@ class WhatsappConversationZipController extends Controller
 
         $wc = WhatsappConversation::create([
             'assistant_id' => $assistant->id,
-            'zip_aws_path' => $zipKey,
-            'conversation' => $chat,         // si prefieres guardarlo como JSON, cámbialo a array/obj y el cast en el Model
+            // 'zip_aws_path' => $zipKey, // only if you actually store the raw zip
+            'conversation' => $chat,
             'metadata'     => $metadata,
         ]);
 
-        // --- iterate and upload every media file inside ZIP ---
-        $createdMedia = [];
-        $mediaBaseDir = 'assistants/'.$assistant->id.'/media/whatsapp/'.$wc->id;
-
-        // utilidades
+        // 8) FIRST PASS — validate all entries; reject on any violation
+        $forbidden = [];
         $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : null;
-        $detectMime = function (string $bytes, ?object $fi) {
-            if ($fi) {
-                $m = @finfo_buffer($fi, $bytes);
-                if (is_string($m) && $m !== 'application/octet-stream') return $m;
-            }
-            // fallback por extensión dentro de S3
-            return 'application/octet-stream';
-        };
-        $mapType = function (string $mime, string $name) {
-            $mime = strtolower($mime);
-            if (str_starts_with($mime, 'image/')) return 'image';
-            if (str_starts_with($mime, 'video/')) return 'video';
-            if (str_starts_with($mime, 'audio/')) return 'audio';
-            if (str_starts_with($mime, 'text/'))  return 'text';
-            // por extensión (pdf -> text)
-            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-            if (in_array($ext, ['txt','srt','vtt','csv','log','json','md'])) return 'text';
-            if ($ext === 'pdf') return 'text';
-            // por si WhatsApp mete archivos "dat" o sin extensión
-            return 'text';
-        };
 
-        // nombres a ignorar
-        $ignoreNames = [
-            '__MACOSX/', '.DS_Store', 'Thumbs.db'
-        ];
+        for ($i = 0; $i < $numFiles; $i++) {
+            if ($i === $chatIndex) continue;
 
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            if ($i === $chatIndex) continue; // saltar _chat.txt
+            $stat = $zip->statIndex($i);
+            if (!$stat) continue;
 
-            $name = $zip->getNameIndex($i);
-            if (!$name || str_ends_with($name, '/')) continue; // carpeta
+            $name = $stat['name'] ?? '';
+            if ($name === '' || str_ends_with($name, '/')) continue; // directory
+
             $bn = basename($name);
-            if ($bn === '' || in_array($bn, $ignoreNames, true)) continue;
-            foreach ($ignoreNames as $ign) {
+            if ($bn === '' || in_array($bn, self::IGNORE_NAMES, true)) continue;
+
+            foreach (self::IGNORE_NAMES as $ign) {
                 if (str_starts_with($name, $ign) || str_contains($name, '/'.$ign)) {
                     continue 2;
                 }
             }
 
+            // 8.1 Path traversal / absolute paths (POSIX + Windows)
+            if (str_contains($name, '../') || str_contains($name, '..\\') || str_starts_with($name, '/') || preg_match('/^[A-Za-z]:[\\\\\\/]/', $name)) {
+                $forbidden[] = ['entry'=>$name,'reason'=>'path traversal / absolute path'];
+                continue;
+            }
+
+            // 8.2 Per-file size
+            $uncomp = (int)($stat['size'] ?? 0);
+            if ($uncomp > self::MAX_FILE_BYTES) {
+                $forbidden[] = ['entry'=>$name,'reason'=>'file too large'];
+                continue;
+            }
+
+            // 8.3 Dangerous final extension
+            $ext = strtolower(pathinfo($bn, PATHINFO_EXTENSION));
+            if (in_array($ext, self::DENY_EXT, true)) {
+                $forbidden[] = ['entry'=>$name,'reason'=>'dangerous extension'];
+                continue;
+            }
+
+            // 8.4 Suspicious double extension (e.g., photo.jpg.exe)
+            if (self::hasSuspiciousDoubleExt($bn)) {
+                $forbidden[] = ['entry'=>$name,'reason'=>'suspicious double extension'];
+                continue;
+            }
+
+            // 8.5 Read bytes (only if needed & within caps)
+            $bytes = $zip->getFromIndex($i);
+            if ($bytes === false) {
+                $forbidden[] = ['entry'=>$name,'reason'=>'unreadable'];
+                continue;
+            }
+
+            // 8.6 MIME detection + deny by MIME family
+            $mime = self::detectMime($bytes, $finfo);
+            if (self::isDeniedByMime($mime)) {
+                $forbidden[] = ['entry'=>$name,'reason'=>"dangerous mime ($mime)"];
+                continue;
+            }
+
+            // 8.7 Positive allowlist (family or single or extension)
+            $okByMime = false;
+            foreach (self::ALLOW_SAFE_MIME_PREFIX as $p) {
+                if (str_starts_with($mime, $p)) { $okByMime = true; break; }
+            }
+            if (!$okByMime && !in_array($mime, self::ALLOW_SAFE_SINGLE, true) && !in_array($ext, self::ALLOW_SAFE_EXT, true)) {
+                $forbidden[] = ['entry'=>$name,'reason'=>"unsupported type ($mime)"];
+                continue;
+            }
+
+            // 8.8 SVG hardening
+            if ($ext === 'svg' || $mime === 'image/svg+xml') {
+                $snippet = strtolower(substr($bytes, 0, 4096));
+                if (str_contains($snippet, '<script') || preg_match('/on[a-z]+\s*=/i', $snippet)) {
+                    $forbidden[] = ['entry'=>$name,'reason'=>'svg with script/handlers'];
+                    continue;
+                }
+            }
+
+            // 8.9 No nested ZIPs
+            if ($ext === 'zip' || $mime === 'application/zip' || $mime === 'application/x-zip-compressed') {
+                $forbidden[] = ['entry'=>$name,'reason'=>'nested zip not allowed'];
+                continue;
+            }
+        }
+
+        if ($finfo) { @finfo_close($finfo); }
+
+        if (!empty($forbidden)) {
+            $zip->close();
+            return response()->json([
+                'status'=>false,
+                'errors'=>['file'=>['ZIP contains forbidden entries','details'=>$forbidden]]
+            ], 422);
+        }
+
+        // 9) SECOND PASS — upload safe media
+        $createdMedia = [];
+        $mediaBaseDir = 'assistants/'.$assistant->id.'/media/whatsapp/'.$wc->id;
+
+        $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : null;
+
+        for ($i = 0; $i < $numFiles; $i++) {
+            if ($i === $chatIndex) continue;
+
+            $stat = $zip->statIndex($i);
+            if (!$stat) continue;
+
+            $name = $stat['name'] ?? '';
+            if ($name === '' || str_ends_with($name, '/')) continue;
+
+            $bn = basename($name);
+            if ($bn === '' || in_array($bn, self::IGNORE_NAMES, true)) continue;
+
+            foreach (self::IGNORE_NAMES as $ign) {
+                if (str_starts_with($name, $ign) || str_contains($name, '/'.$ign)) continue 2;
+            }
+
             $bytes = $zip->getFromIndex($i);
             if ($bytes === false) continue;
 
-            // detectar mime & tipo
-            $mime = $detectMime($bytes, $finfo);
-            $type = $mapType($mime, $name);
+            $mime = self::detectMime($bytes, $finfo);
+            $type = self::mapType($mime, $name);
 
-            // subir a S3
             $safeBn = preg_replace('/[^\w\.\-]+/u', '_', $bn);
             $s3key  = $mediaBaseDir.'/'.(string) Str::uuid().'-'.$safeBn;
 
             Storage::disk('s3')->put($s3key, $bytes, [
-                'visibility'  => 'public',
+                'visibility'  => 'public', // switch to 'private' if you proxy downloads
                 'ContentType' => $mime ?: 'application/octet-stream',
             ]);
 
             $publicUrl = Storage::disk('s3')->url($s3key);
 
-            // crear media row (UUID único)
             do { $mid = (string) Str::uuid(); } while (Media::whereKey($mid)->exists());
 
             $media = new Media();
             $media->id                    = $mid;
             $media->assistant_id          = $assistant->id;
-            $media->type                  = $type;              // 'image'|'audio'|'video'|'text'
+            $media->type                  = $type;
             $media->storage_url           = $publicUrl;
             $media->transcription         = null;
             $media->metadata              = [
-                'source'                 => 'whatsapp_zip_media',
-                'zip_path'               => $name,             // ruta interna dentro del ZIP
-                'mime'                   => $mime,
-                'size'                   => strlen($bytes),
-                //'conversation_id'        => ,
-                'original_zip'           => $file->getClientOriginalName(),
+                'source'       => 'whatsapp_zip_media',
+                'zip_path'     => $name,
+                'mime'         => $mime,
+                'size'         => strlen($bytes),
+                'original_zip' => $file->getClientOriginalName(),
             ];
-            //$media->extra_fields          = null;               // si ocupas estos campos custom
-            //$media->extra_fields_two      = null;
             $media->whatsapp_media_file_id= $wc->id;
             $media->date_upload           = now();
             $media->save();
 
-            // resumen para respuesta (usa tu presentador si existe)
-            if (method_exists($this, 'presentMedia')) {
-                $createdMedia[] = $this->presentMedia($media);
-            } else {
-                $createdMedia[] = [
-                    'id'           => $media->id,
-                    'type'         => $media->type,
-                    'storage_url'  => $media->storage_url,
-                    'mime'         => $mime,
-                    'zip_path'     => $name,
-                    'date_upload'  => optional($media->date_upload)->toIso8601String(),
-                ];
-            }
+            $createdMedia[] = [
+                'id'           => $media->id,
+                'type'         => $media->type,
+                'storage_url'  => $media->storage_url,
+                'mime'         => $mime,
+                'zip_path'     => $name,
+                'date_upload'  => optional($media->date_upload)->toIso8601String(),
+            ];
         }
 
         if ($finfo) { @finfo_close($finfo); }
         $zip->close();
 
-        return response()->json([
-            'status' => true,
-            'msg'    => 'WhatsApp ZIP saved; _chat.txt + media uploaded',
-            'data'   => [
-                'id'              => $wc->id,
-                'assistant_id'    => $wc->assistant_id,
-                'zip_aws_path'    => $wc->zip_aws_path,
-                'media_created'   => $createdMedia,
-                'media_count'     => count($createdMedia),
-            ],
-        ], 201);
+        // 10) Return Resource + meta
+        return (new WhatsappConversationResource($wc))
+            //->additional([
+            //    'status' => true,
+            //    'meta'   => [
+            //        'media_created' => $createdMedia,
+            //        'media_count'   => count($createdMedia),
+            //        'zip_aws_path'  => $wc->zip_aws_path, // null if you didn't upload the raw zip
+            //    ],
+            //])
+            ->response()
+            ->setStatusCode(201);
     }
 
+    // =====================================================================
+    // ========== Helpers converted to public static methods ================
+    // =====================================================================
+
+    /**
+     * Best-effort MIME detection from raw bytes using finfo.
+     * Falls back to 'application/octet-stream'.
+     */
+    public static function detectMime(string $bytes, $finfo = null): string
+    {
+        if ($finfo) {
+            $m = @finfo_buffer($finfo, $bytes);
+            if (is_string($m) && $m !== 'application/octet-stream') {
+                return strtolower($m);
+            }
+        }
+        return 'application/octet-stream';
+    }
+
+    /**
+     * Check if MIME matches any dangerous family prefix.
+     */
+    public static function isDeniedByMime(string $mime): bool
+    {
+        $mime = strtolower($mime);
+        foreach (self::DENY_MIME_PREFIX as $p) {
+            if (str_starts_with($mime, $p)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Detect suspicious double-extension like photo.jpg.exe
+     * We only consider the final extension dangerous.
+     */
+    public static function hasSuspiciousDoubleExt(string $name): bool
+    {
+        $parts = explode('.', strtolower(basename($name)));
+        if (count($parts) >= 3) {
+            $last = array_pop($parts);
+            if (in_array($last, self::DENY_EXT, true)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Map MIME (and fallback to extension) to internal type buckets.
+     * Returns one of: 'image' | 'video' | 'audio' | 'text'
+     */
+    public static function mapType(string $mime, string $name): string
+    {
+        $mime = strtolower($mime);
+        if (str_starts_with($mime, 'image/')) return 'image';
+        if (str_starts_with($mime, 'video/')) return 'video';
+        if (str_starts_with($mime, 'audio/')) return 'audio';
+        if (str_starts_with($mime, 'text/'))  return 'text';
+
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        if (in_array($ext, ['txt','srt','vtt','csv','log','json','md','xml'])) return 'text';
+        if ($ext === 'pdf' || $mime === 'application/pdf') return 'text';
+        return 'text';
+    }
         // GET /api/whatsapp-conversations
     public function index(Request $request): JsonResponse
     {
@@ -253,8 +454,7 @@ class WhatsappConversationZipController extends Controller
             $raw = json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
-        // Usa tu Resource (trae media paginado con ?media_page=&media_per_page=)
-        // y luego añade text/byte_size/zip_download para que se muestren siempre.
+
         $data = (new \App\Http\Resources\WhatsappConversationResource($wc))
             ->toArray($request);
 
