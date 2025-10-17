@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use App\Jobs\SendVerificationEmail;
 use Illuminate\Http\Request;
+use App\Jobs\SendVerificationEmail;
+use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\{Auth, Hash, Validator};
 
 class AuthController extends Controller
@@ -74,12 +75,7 @@ class AuthController extends Controller
             'data'   => [
                 'token' => $token,
                 'type'  => 'Bearer',
-                'user'  => [
-                    'id'    => $user->id,
-                    'name'  => $user->name,
-                    'email' => $user->email,
-                    'rol'   => $user->rol,
-                ],
+                'user'  =>  UserResource::make($user)
             ],
         ]);
     }

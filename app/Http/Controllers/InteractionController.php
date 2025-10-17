@@ -88,19 +88,20 @@ class InteractionController extends Controller
             return response()->json(['status'=>false,'errors'=>['session'=>['This session is already closed']]], 422);
         }
 
+        //##IMPORTANTE - ESTO SE REMOVIO PORQUE EL USUARIO PUEDE ENVIAR CUALQUIER X CANTIDAD DE MENSAJES
         // Gate: bloquear si la última interacción no ha sido respondida y no cancelada
-        $skipGate = $request->boolean('continue') || $request->boolean('force');
-        if (!$skipGate) {
-            $last = Interaction::where('session_id', $session->id)
-                ->orderBy('timestamp', 'desc')
-                ->first();
-            if ($last && !$last->was_canceled && $last->has_response === false) {
-                return response()->json([
-                    'status'=>false,
-                    'errors'=>['interaction'=>['Previous message is still pending. Send continue=1 to proceed.']],
-                ], 409);
-            }
-        }
+        //$skipGate = $request->boolean('continue') || $request->boolean('force');
+        //if (!$skipGate) {
+        //    $last = Interaction::where('session_id', $session->id)
+        //        ->orderBy('timestamp', 'desc')
+        //        ->first();
+        //    if ($last && !$last->was_canceled && $last->has_response === false) {
+        //        return response()->json([
+        //            'status'=>false,
+        //            'errors'=>['interaction'=>['Previous message is still pending. Send continue=1 to proceed.']],
+        //        ], 409);
+        //    }
+        //}
 
         // Subir audio del USUARIO si viene archivo
         if ($request->hasFile('user_audio_file')) {

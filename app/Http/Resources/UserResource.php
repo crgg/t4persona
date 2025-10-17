@@ -19,7 +19,7 @@ class UserResource extends JsonResource
             'country'         => $this->country,
             'language'        => $this->language,
             //'avatar_path'     => $this->avatar_path,
-            'avatar_url'      => $this->avatar_path ? Storage::disk('public')->url($this->avatar_path) : null,
+            'avatar_url'      => $this->avatar_path ? Storage::disk('s3')->url($this->avatar_path) : null,
             'date_register'   => optional($this->date_register)->toISOString(),
             'last_login'      => optional($this->last_login)->toISOString(),
             'email_verified_at' => optional($this->email_verified_at)->toISOString(),

@@ -197,6 +197,20 @@ class AssistantController extends Controller
             $assistant->base_personality = $data['base_personality'];
         }
 
+        if (array_key_exists('language', $data)) {
+            $assistant->language = trim($data['language']);
+        }
+
+        if (array_key_exists('family_relationship', $data)) {
+            $assistant->family_relationship = trim($data['family_relationship']);
+        }
+        if (array_key_exists('country', $data)) {
+            $assistant->country = trim($data['country']);
+        }
+        if (array_key_exists('age', $data)) {
+            $assistant->age = trim($data['age']);
+        }
+
         try {
             $assistant->save();
         } catch (QueryException $e) {
