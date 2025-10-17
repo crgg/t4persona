@@ -63,7 +63,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user = User::where('email', $r->email)->firstOrFail();
+        $user = User::where('email', $r->email)->where('rol','!=' ,'admin' )->firstOrFail();
         $user->last_login = now();
         $user->save();
 

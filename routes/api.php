@@ -9,6 +9,7 @@ use App\Http\Controllers\AnswerController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\UserAdminController;
 use App\Http\Controllers\InteractionController;
 use App\Http\Controllers\SoftwareMediaController;
 use App\Http\Controllers\EmailVerificationController;
@@ -73,6 +74,14 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/assistant-questions', [QuestionController::class, 'index']);
     Route::post('/assistant-answers', [AnswerController::class, 'store']);
 
+
+});
+
+//ADMIN ROUTES
+Route::post('/admin-auth/login',    [UserAdminController::class, 'login']);
+
+Route::middleware(['auth:api','role.admin'])->group(function () {
+    Route::get('/admin-users',                 [UserAdminController::class, 'index']);
 });
 
 Route::middleware('software.respond_api_token')->group(function () {
