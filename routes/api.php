@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\AnswerController;
+use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\AssistantController;
@@ -104,3 +105,8 @@ Route::middleware('software.respond_api_token')->group(function () {
 
 Route::get('email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
     ->name('verification.verify');
+
+//##########GOOGLE REGISTER
+Route::post('google_auth',  [GoogleController::class, 'redirect_to_google_login'] );
+Route::get('auth/google/callback', [GoogleController::class, 'callback']);
+Route::post('auth/google/redirect', [GoogleController::class, 'redirect']);

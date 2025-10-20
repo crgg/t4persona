@@ -211,6 +211,10 @@ return [
     'aliases' => Facade::defaultAliases()->merge([
         // 'ExampleClass' => App\Example\ExampleClass::class,
     ])->toArray(),
-    'API_RESPONSE_KEY' => env('API_RESPONSE_KEY')
+    'API_RESPONSE_KEY' => env('API_RESPONSE_KEY'),
+    'GOOGLE_CLIENT_ID' => env('GOOGLE_CLIENT_ID'),
+    'GOOGLE_SECRET_ID' => env('GOOGLE_SECRET_ID'),
+    'CALLBACK_GOOGLE_URL' => env('CALLBACK_GOOGLE_URL'),
+    'FRONT_END_WEB_URL' => env('FRONT_END_WEB_URL'),
 
 ];
