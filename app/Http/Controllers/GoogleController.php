@@ -142,13 +142,13 @@ class GoogleController extends Controller
 
                     \Log::debug('EMAIL USER HAS CREATED AN ACCOUNT BY GOOGLE GMAIL - '.$email);
 
-                    return redirect(config('app.FRONT_END_WEB_URL').'sign-in?gstatus=true&code='.$generate_code);
+                    return redirect(config('app.FRONT_END_WEB_URL').'login?gstatus=true&code='.$generate_code);
                 }
             }
         }
 
         // error genérico
-        return redirect(config('app.FRONT_END_WEB_URL').'sign-in?gstatus=false&msg=Google%login%is%not%working,%please%try%again%later.');
+        return redirect(config('app.FRONT_END_WEB_URL').'login?gstatus=false&msg=Google%login%is%not%working,%please%try%again%later.');
     }
 
     public function redirect(Request $request)
@@ -167,8 +167,12 @@ class GoogleController extends Controller
 
             return response()->json([
                 'status'    => true,
-                'user'      => UserResource::make( $generatet_user ) ,
-                'api_token' => $api_token
+                'msg'       => 'Google Login successfully',
+                'data'      => [
+                    'token' => $api_token,
+                    'type'  => 'Bearer',
+                    'user'  =>  UserResource::make( $generatet_user )
+                ]
             ]);
         }
 
