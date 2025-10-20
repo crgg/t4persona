@@ -28,7 +28,7 @@ class GenerateAdminUser extends Command
     public function handle()
     {
 
-        $emails = ['geremy@t4app.com','ramon@t4app.com'];
+        $emails = ['geremy@t4app.com','ramon@t4app.com','admin@t4app.com'];
 
         foreach ($emails as $key => $email) {
 

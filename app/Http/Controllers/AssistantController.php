@@ -211,6 +211,10 @@ class AssistantController extends Controller
             $assistant->age = trim($data['age']);
         }
 
+        if (array_key_exists('alias', $data)) {
+            $assistant->alias = trim($data['alias']);
+        }
+
         try {
             $assistant->save();
         } catch (QueryException $e) {

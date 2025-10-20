@@ -10,7 +10,7 @@ class UserAdminResource extends JsonResource
     public function toArray($request): array
     {
         return [
-            'id'              => (string) $this->id,
+            'id'              => (int) $this->id,
             'name'            => (string) $this->name,
             'email'           => (string) $this->email,
             'rol'             => $this->rol,

@@ -81,7 +81,8 @@ Route::middleware('auth:api')->group(function () {
 Route::post('/admin-auth/login',    [UserAdminController::class, 'login']);
 
 Route::middleware(['auth:api','role.admin'])->group(function () {
-    Route::get('/admin-users',                 [UserAdminController::class, 'index']);
+    Route::get('/admin-administrate-users',   [UserAdminController::class, 'index']);
+
 });
 
 Route::middleware('software.respond_api_token')->group(function () {

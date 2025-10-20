@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use App\Http\Resources\UserCollection;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\UserAdminResource;
 use Illuminate\Validation\Rules\Password;
@@ -15,19 +16,45 @@ use App\Http\Resources\UserAdminCollection;
 
 class UserAdminController extends Controller
 {
+    CONST ROLE_ARRAY = ['admin','user'];
 
     public function index(Request $request){
 
+
+        $rol = '';
+
+        if(isset( $request->role )){
+
+            if(! in_array( $request->role , self::ROLE_ARRAY ) ){
+                return response()->json([
+                    'status' => false,
+                    'msg'    => "Plase select 'admin' or 'user' for role, used '$request->role' "
+                ]);
+            }
+
+            $rol = $request->role;
+
+        }else{
+            $rol = 'admin';
+        }
+
         $perPage  = $request->per_page ?? 25;
 
-
         $query = User::query()
-            ->where('rol', 'admin');
+            ->where('rol',$rol);
         $query->orderBy('id','desc');
-        $paginator = $query->paginate($perPage)->withQueryString();
-        return response()->json(
-            (new UserAdminCollection($paginator))->toArray($request)
-        );
+
+        if($rol == 'admin'){
+            $paginator = $query->paginate($perPage)->withQueryString();
+            return response()->json(
+                (new UserAdminCollection($paginator))->toArray($request)
+            );
+        }else{
+            $paginator = $query->paginate($perPage)->withQueryString();
+            return response()->json(
+                (new UserCollection($paginator))->toArray($request)
+            );
+        }
 
     }
 
