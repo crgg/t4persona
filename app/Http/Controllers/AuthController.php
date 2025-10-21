@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Jobs\SendVerificationEmail;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\{Auth, Hash, Validator};
+use App\Http\Controllers\RegistrationNotifierController;
 
 class AuthController extends Controller
 {
@@ -40,7 +41,7 @@ class AuthController extends Controller
         ]);
 
         dispatch(new SendVerificationEmail($user));
-
+        RegistrationNotifierController::notify($user, $r);
         $token = $user->createToken('api')->accessToken;
 
         return response()->json([

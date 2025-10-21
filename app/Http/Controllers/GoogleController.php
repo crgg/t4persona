@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
 use App\Http\Controllers\API\ManageClientsController;
+use App\Http\Controllers\RegistrationNotifierController;
 
 class GoogleController extends Controller
 {
@@ -136,6 +137,8 @@ class GoogleController extends Controller
                     $generate_code = Str::random(100);
 
                     $user->refresh();
+
+                    RegistrationNotifierController::notify( $user , $request );
 
                     Cache::put('generatet_user'.$generate_code, $user );
                     Cache::put('api_token'.$generate_code, $token);
