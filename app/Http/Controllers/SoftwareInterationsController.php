@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Validator;
 use App\Http\Resources\InteractionResource;
 use App\Http\Resources\InteractionCollection;
 use App\Models\GeneratedSession; // tabla 'sessions'
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class SoftwareInterationsController extends Controller
 {
@@ -76,15 +78,19 @@ class SoftwareInterationsController extends Controller
      */
     public function respond(Request $request, string $interactionId): JsonResponse
     {
-
         $v = Validator::make($request->all(), [
-            'assistant_text_response'  => ['nullable','string'],
-            'assistant_audio_response' => ['nullable','url'],
-            'assistant_audio_file'     => ['sometimes','file','max:'.self::MAX_FILE_KB,
-                                           'mimetypes:audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a'],
-            'emotion_deteted'          => ['nullable','string','max:100'],
-            'file_uuid'          => ['nullable','string','max:100'],
+            'assistant_text_response'   => ['nullable','string'],
+            'assistant_audio_response'  => ['nullable','url'],
+            'assistant_audio_file'      => ['sometimes','file','max:'.self::MAX_FILE_KB,
+                                            'mimetypes:audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a'],
+            'assistant_image_response'  => ['nullable','url'],
+            'assistant_image_file'      => ['sometimes','file','max:'.self::MAX_FILE_KB,
+                                            'mimetypes:image/jpeg,image/png,image/webp,image/gif'],
+            'emotion_deteted'           => ['nullable','string','max:100'],
+            'file_uuid'                 => ['nullable','string','max:100'],
+            'file_respond'              => ['nullable','string','max:100'],
         ]);
+
         if ($v->fails()) return response()->json(['status'=>false,'errors'=>$v->errors()], 422);
         $data = $v->validated();
 
@@ -93,13 +99,13 @@ class SoftwareInterationsController extends Controller
 
         $session   = GeneratedSession::where('id', $row->session_id)->first();
         $assistant = $session ? Assistant::find($session->assistant_id) : null;
-        if (!$assistant ) {
+        if (!$assistant) {
             return response()->json(['status'=>false,'errors'=>['authorization'=>['Forbidden']]], 403);
         }
         if ($session->date_end !== null) {
             return response()->json(['status'=>false,'errors'=>['session'=>['This session is already closed']]], 422);
         }
-        if ($row->cancel) {
+        if ($row->was_canceled) {   // <— en vez de $row->cancel
             return response()->json([
                 'status'=>false,
                 'errors'=>['interaction'=>['This interaction has been cancelled']],
@@ -107,14 +113,14 @@ class SoftwareInterationsController extends Controller
         }
 
         // Evitar sobre-escritura si ya había respuesta
-        if (!empty($row->assistant_text_response) || !empty($row->assistant_audio_response)) {
-            return response()->json([
-                'status'=>false,
-                'errors'=>['interaction'=>['This interaction already has an assistant response']],
-            ], 422);
+        if (!empty($row->assistant_text_response) || !empty($row->assistant_audio_response) || !empty($row->assistant_image_response ?? null)) {
+            //return response()->json([
+            //    'status'=>false,
+            //    'errors'=>['interaction'=>['This interaction already has an assistant response']],
+            //], 422);
         }
 
-        // Subir audio del ASISTENTE si viene archivo
+        // Subir AUDIO del asistente (archivo)
         if ($request->hasFile('assistant_audio_file')) {
             $file  = $request->file('assistant_audio_file');
             $clean = preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
@@ -132,16 +138,41 @@ class SoftwareInterationsController extends Controller
             $data['assistant_audio_response'] = Storage::disk('s3')->url($key);
         }
 
-        // Debe venir al menos texto o audio del asistente
-        if (empty($data['assistant_text_response']) && empty($data['assistant_audio_response'])) {
+        // Subir IMAGEN del asistente (archivo)
+        if ($request->hasFile('assistant_image_file')) {
+            $img   = $request->file('assistant_image_file');
+            $clean = preg_replace('/[^A-Za-z0-9._-]/', '_', $img->getClientOriginalName());
+            $key   = 'assistants/'.$assistant->id.'/sessions/'.$session->id.'/interactions/'.(string) Str::uuid().'-assistant-image-'.$clean;
+
+            Storage::disk('s3')->putFileAs(
+                dirname($key),
+                $img,
+                basename($key),
+                [
+                    'visibility'  => 'public',
+                    'ContentType' => $img->getClientMimeType() ?: $img->getMimeType(),
+                ]
+            );
+            $data['assistant_image_response'] = Storage::disk('s3')->url($key);
+        }
+
+        // Debe venir al menos texto, audio o imagen
+        if (
+            empty($data['assistant_text_response']) &&
+            empty($data['assistant_audio_response']) &&
+            empty($data['assistant_image_response'])
+        ) {
             return response()->json([
                 'status'=>false,
-                'errors'=>['content'=>['Provide assistant_text_response or assistant_audio_file/assistant_audio_response']],
+                'errors'=>['content'=>['Provide assistant_text_response or assistant_audio_file/assistant_audio_response or assistant_image_file/assistant_image_response']],
             ], 422);
         }
 
-        $row->assistant_text_response  = $data['assistant_text_response']  ?? null;
-        $row->assistant_audio_response = $data['assistant_audio_response'] ?? null;
+        $row->assistant_text_response   = $data['assistant_text_response']   ?? null;
+        $row->assistant_audio_response  = $data['assistant_audio_response']  ?? null;
+        // Nuevo: guardar URL de imagen
+        $row->assistant_image_response  = $data['assistant_image_response']  ?? null;
+
         if (array_key_exists('emotion_deteted', $data)) {
             $row->emotion_deteted = $data['emotion_deteted'];
         }

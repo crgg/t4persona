@@ -18,9 +18,14 @@ class Interaction extends Model
         'text_from_user',
         'assistant_text_response',
         'assistant_audio_response',
-        'emotion_deteted',    // (tal cual está escrito en el doc)
+        'assistant_image_response',
+        'emotion_deteted',
         'timestamp',
+        'user_audio_url',
+        'has_response',
+        'was_canceled',
         'file_uuid',
+        'file_respond'
     ];
 
     protected $casts = [

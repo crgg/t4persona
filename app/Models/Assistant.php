@@ -24,7 +24,9 @@ class Assistant extends Model
         'family_relationship',
         'alias',
         'country',
-        'language'
+        'language',
+        'death_date',
+        'birth_date',
     ];
 
     protected $casts = [

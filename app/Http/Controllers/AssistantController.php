@@ -94,16 +94,17 @@ class AssistantController extends Controller
                 }),
             ],
             'state'            => 'sometimes|string|max:20',
-            'base_personality' => 'nullable|array',
+            'base_personality' => 'sometimes|array',
 
 
             'age' => 'required|integer',
             //'avatar_path',
-            'family_relationship' => 'nullable|string',
-            'alias'     => 'nullable|string',
-            'country'   => 'nullable|string',
-            'language'  => 'nullable|string'
-
+            'family_relationship' => 'sometimes|string',
+            'alias'     => 'sometimes|string',
+            'country'   => 'sometimes|string',
+            'language'  => 'sometimes|string',
+            'death_date'  => 'sometimes|date',
+            'birth_date'  => 'sometimes|date'
         ]);
 
         if ($validator->fails()) {
@@ -118,14 +119,18 @@ class AssistantController extends Controller
         $assistant                   = new Assistant();
         $assistant->id               = (string) Str::uuid();
         $assistant->user_id          = $request->user()->id;
-        $assistant->name             = trim($data['name']);
-        $assistant->state            = array_key_exists('state', $data) ? $data['state'] : 'neutral';
-        $assistant->base_personality = array_key_exists('base_personality', $data) ? $data['base_personality'] : null;
+
+        $assistant->fill($data);
+
+        //$assistant->name             = trim($data['name']);
+        //$assistant->state            = array_key_exists('state', $data) ? $data['state'] : 'neutral';
+        //$assistant->base_personality = array_key_exists('base_personality', $data) ? $data['base_personality'] : null;
         $assistant->date_creation    = now();
 
         try {
             $assistant->save();
         } catch (QueryException $e) {
+
             return response()->json([
                 'status' => false,
                 'errors' => ['database' => ['Error creating assistant']],
@@ -175,7 +180,9 @@ class AssistantController extends Controller
             'family_relationship' => 'sometimes|string',
             'alias'     => 'sometimes|string',
             'country'   => 'sometimes|string',
-            'language'  => 'sometimes|string'
+            'language'  => 'sometimes|string',
+            'death_date'  => 'sometimes|date',
+            'birth_date'  => 'sometimes|date'
         ]);
 
         if ($validator->fails()) {
@@ -213,6 +220,12 @@ class AssistantController extends Controller
 
         if (array_key_exists('alias', $data)) {
             $assistant->alias = trim($data['alias']);
+        }
+        if (array_key_exists('death_date', $data)) {
+            $assistant->state = $data['death_date'];
+        }
+        if (array_key_exists('birth_date', $data)) {
+            $assistant->state = $data['birth_date'];
         }
 
         try {

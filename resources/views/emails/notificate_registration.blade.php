@@ -1,5 +1,5 @@
 @component('mail::message')
-# New User Registration
+# New User Registration T4EVER
 
 **Name:** {{ $user->name ?? '-' }}
 **Email:** {{ $user->email ?? '-' }}

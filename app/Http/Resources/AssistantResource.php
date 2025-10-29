@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -98,9 +99,10 @@ class AssistantResource extends JsonResource
             'alias'             => $this->alias,
             'country'           => $this->country,
             'language'          => $this->language,
-            'base_personality' => $this->base_personality,
-            'date_creation'    => $this->date_creation?->toIso8601String(),
-
+            'base_personality'  => $this->base_personality,
+            'date_creation'     => Carbon::parse($this->date_creation)->format('m/d/Y H:i:s') ,
+            'death_date'        => Carbon::parse($this->death_date)->format('m/d/Y'),
+            'birth_date'        => Carbon::parse($this->birth_date)->format('m/d/Y'),
             'open_session'     => $open,
             'last_session'     => $open ? null : $last_session,
 
