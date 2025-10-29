@@ -35,9 +35,9 @@ class GoogleController extends Controller
         // generamos la url con las claves de auth de google
         $clientId    = config('app.GOOGLE_CLIENT_ID');
         $redirectUri = config('app.CALLBACK_GOOGLE_URL');
-        $scope = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/user.phonenumbers.read';
+        $scope = 'openid email profile https://www.googleapis.com/auth/user.phonenumbers.read';
 
-        $authUrl = 'https://accounts.google.com/o/oauth2/auth?' . http_build_query([
+        $authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
             'client_id'              => $clientId,
             'redirect_uri'           => $redirectUri,
             'scope'                  => $scope,
@@ -81,6 +81,8 @@ class GoogleController extends Controller
 
         $response = json_decode($response);
 
+        Log::debug('response: '.json_encode($response));
+
         if (isset($response->access_token)) {
 
             $accessToken = $response->access_token;
@@ -91,6 +93,7 @@ class GoogleController extends Controller
             );
 
             $userInfo = $library_response->json();
+            Log::debug('userInfo: '.json_encode($userInfo));
 
             // email para iniciar sesión
             if (isset($userInfo['emailAddresses'][0]['value']) && !empty($userInfo['emailAddresses'][0]['value'])) {
@@ -98,7 +101,12 @@ class GoogleController extends Controller
                 $exists_email = User::where('email', $email)->first();
 
                 if ($exists_email) {
-                    // TOKEN con Passport
+                    if ($exists_email->date_register == null || $exists_email->email_verified_at == null) {
+                        $exists_email->date_register = now();
+                        $exists_email->email_verified_at = now();
+                        $exists_email->save();
+                    }
+                    
                     $token = $exists_email->createToken('api')->accessToken;
 
                     $generate_code = Str::random(100);

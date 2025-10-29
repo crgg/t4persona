@@ -32,6 +32,8 @@ class User extends Authenticatable
         'alias',
         'country',
         'language',
+        'email_verified_at',
+        
     ];
 
     /**
