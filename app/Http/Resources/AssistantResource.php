@@ -101,8 +101,8 @@ class AssistantResource extends JsonResource
             'language'          => $this->language,
             'base_personality'  => $this->base_personality,
             'date_creation'     => Carbon::parse($this->date_creation)->format('m/d/Y H:i:s') ,
-            'death_date'        => Carbon::parse($this->death_date)->format('m/d/Y'),
-            'birth_date'        => Carbon::parse($this->birth_date)->format('m/d/Y'),
+            'death_date'        => is_null($this->death_date) ? null : Carbon::parse($this->death_date)->format('m/d/Y'),
+            'birth_date'        => is_null($this->birth_date) ? null : Carbon::parse($this->birth_date)->format('m/d/Y'),
             'open_session'     => $open,
             'last_session'     => $open ? null : $last_session,
 

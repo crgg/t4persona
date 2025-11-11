@@ -49,8 +49,8 @@ class AssistantController extends Controller
         if ($searchTerm !== null) {
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('name',  'ilike', '%'.$searchTerm.'%')
-                ->orWhere('state','ilike', '%'.$searchTerm.'%')
-                ->orWhere('id', $searchTerm); // match exacto por UUID si lo pasan
+                  ->orWhere('state','ilike', '%'.$searchTerm.'%')
+                  ->orWhere('id', $searchTerm); // match exacto por UUID si lo pasan
             });
         }
 
@@ -96,7 +96,6 @@ class AssistantController extends Controller
             'state'            => 'sometimes|string|max:20',
             'base_personality' => 'sometimes|array',
 
-
             'age' => 'required|integer',
             //'avatar_path',
             'family_relationship' => 'sometimes|string',
@@ -130,7 +129,7 @@ class AssistantController extends Controller
         try {
             $assistant->save();
         } catch (QueryException $e) {
-
+            \Log::error('AssistantController@store: error creating assistant', ['exception' => $e]);
             return response()->json([
                 'status' => false,
                 'errors' => ['database' => ['Error creating assistant']],
@@ -231,6 +230,7 @@ class AssistantController extends Controller
         try {
             $assistant->save();
         } catch (QueryException $e) {
+            \Log::error('AssistantController@update: error updating assistant', ['exception' => $e]);
             return response()->json([
                 'status' => false,
                 'errors' => ['database' => ['Error updating assistant']],
@@ -252,6 +252,7 @@ class AssistantController extends Controller
         try {
             $assistant->delete();
         } catch (QueryException $e) {
+            \Log::error('AssistantController@destroy: error deleting assistant', ['exception' => $e]);
             return response()->json([
                 'status' => false,
                 'errors' => ['database' => ['Error deleting assistant']],
@@ -334,6 +335,7 @@ class AssistantController extends Controller
         try {
             $assistant = Assistant::where('id', $id)->first();
         } catch (QueryException $e) {
+            \Log::error('AssistantController@getAssistantOrFail: query error', ['exception' => $e, 'id' => $id]);
             throw new HttpResponseException(
                 response()->json([
                     'status' => false,
@@ -356,7 +358,7 @@ class AssistantController extends Controller
         return $assistant;
     }
 
-        // POST /media  (multipart/form-data)
+    // POST /media  (multipart/form-data)
     public function set_assistant_avatar(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -394,7 +396,6 @@ class AssistantController extends Controller
             ]
         );
 
-
         $assistant->avatar_path = $key;
         $assistant->save();
         $assistant->refresh();
@@ -414,5 +415,4 @@ class AssistantController extends Controller
             );
         }
     }
-
 }
