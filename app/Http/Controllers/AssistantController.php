@@ -180,8 +180,8 @@ class AssistantController extends Controller
             'alias'     => 'sometimes|string',
             'country'   => 'sometimes|string',
             'language'  => 'sometimes|string',
-            'death_date'  => 'sometimes|date',
-            'birth_date'  => 'sometimes|date'
+            'death_date'  => 'sometimes|date|nullable',
+            'birth_date'  => 'sometimes|date|nullable'
         ]);
 
         if ($validator->fails()) {
@@ -221,10 +221,10 @@ class AssistantController extends Controller
             $assistant->alias = trim($data['alias']);
         }
         if (array_key_exists('death_date', $data)) {
-            $assistant->state = $data['death_date'];
+            $assistant->death_date = $data['death_date'];
         }
         if (array_key_exists('birth_date', $data)) {
-            $assistant->state = $data['birth_date'];
+            $assistant->birth_date = $data['birth_date'];
         }
 
         try {
