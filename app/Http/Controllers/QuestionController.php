@@ -33,8 +33,7 @@ class QuestionController extends Controller
         }
 
         $assistantId = $validator->validated()['assistant_id'];
-        $instrument  = $validator->validated()['instrument'] ?? 'BFI-44';
-
+        $instrument  = $validator->validated()['instrument'] ?? 'BFI-12';
         // 2) Active questions for the instrument (ordered)
         $questions = Question::query()
             ->where('is_active', true)
