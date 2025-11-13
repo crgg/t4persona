@@ -102,8 +102,8 @@ class AssistantController extends Controller
             'alias'     => 'sometimes|string',
             'country'   => 'sometimes|string',
             'language'  => 'sometimes|string',
-            'death_date'  => 'sometimes|date',
-            'birth_date'  => 'sometimes|date'
+            'death_date'  => 'sometimes|date|nullable',
+            'birth_date'  => 'sometimes|date|nullable'
         ]);
 
         if ($validator->fails()) {
