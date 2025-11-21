@@ -30,7 +30,11 @@ class SessionController extends Controller
 
         $open = GeneratedSession::where('assistant_id',$assistant->id)->whereNull('date_end')->first();
         if ($open) {
-            return response()->json(['status'=>false,'errors'=>['session'=>['This assistant already has an open session'] , 'data' => $open ]], 422);
+
+            $open->date_end = now();
+            $open->save();
+
+            //return response()->json(['status'=>false,'errors'=>['session'=>['This assistant already has an open session'] , 'data' => $open ]], 422);
         }
 
         $s               = new GeneratedSession();
