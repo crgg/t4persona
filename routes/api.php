@@ -15,6 +15,7 @@ use App\Http\Controllers\InteractionController;
 use App\Http\Controllers\SoftwareMediaController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\SoftwareInterationsController;
+use App\Http\Controllers\SendPushNotificationController;
 use App\Http\Controllers\WhatsappConversationZipController;
 
 /*
@@ -75,6 +76,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/assistant-questions', [QuestionController::class, 'index']);
     Route::post('/assistant-answers', [AnswerController::class, 'store']);
 
+    Route::post('send-push-notification',[SendPushNotificationController::class,'send_push_notification']);
 
 });
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\DeviceToken;
 use Illuminate\Http\Request;
 use App\Jobs\SendVerificationEmail;
 use App\Http\Resources\UserResource;
@@ -55,6 +56,7 @@ class AuthController extends Controller
         $r->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
+            'token_device'  => 'nullable|string'
         ]);
 
         if (! Auth::attempt(['email' => $r->email, 'password' => $r->password])) {
@@ -69,6 +71,10 @@ class AuthController extends Controller
         $user->save();
 
         $token = $user->createToken('api')->accessToken;
+
+        if(isset( $r->token_device )){
+            DeviceToken::save_device_token( $user->id , $r->token_device , $r->phone_from , $r->version );
+        }
 
         return response()->json([
             'status' => true,
