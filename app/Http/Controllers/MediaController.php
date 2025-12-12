@@ -88,6 +88,14 @@ class MediaController extends Controller
 
         /** @var UploadedFile $file */
         $file = $request->file('file');
+        
+$meta = [
+    'original_name' => $file->getClientOriginalName(),
+    'extension'     => $file->getClientOriginalExtension(),
+    'mime'          => $file->getMimeType(),
+    'size_bytes'    => $file->getSize(),
+    'tmp_path'      => $file->getRealPath(),
+];
 
         // Key en S3
         $fileName = preg_replace('/\s+/', '_', $file->getClientOriginalName());
@@ -113,9 +121,11 @@ class MediaController extends Controller
         $media->assistant_id = $assistant->id;
         $media->type         = $data['type'];
         $media->storage_url  = $publicUrl;
-        // Estos los gestiona SOLO el software:
-        $media->transcription= null;
-        $media->metadata     = null;
+        
+        //  how to get the metadata from the file ?        
+        $media->metadata     = $meta;
+        $media->transcription = null;
+
 
         $media->date_upload  = now();
         $media->save();
@@ -232,4 +242,5 @@ class MediaController extends Controller
             );
         }
     }
+    
 }
