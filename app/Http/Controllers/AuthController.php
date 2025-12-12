@@ -66,7 +66,17 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user = User::where('email', $r->email)->where('rol','!=' ,'admin' )->firstOrFail();
+        $user = User::where('email', $r->email)->where('rol','!=' ,'admin' )->first();
+
+        if(!$user){
+
+            return response()->json([
+                'status' => false,
+                'msg'    => 'User cannot do a login from this endpoint '
+            ]);
+
+        }
+
         $user->last_login = now();
         $user->save();
 
