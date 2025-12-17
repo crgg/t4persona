@@ -66,5 +66,6 @@ class Kernel extends HttpKernel
         'email.verified' => \App\Http\Middleware\EnsureEmailVerified::class,
         'software.respond_api_token' => \App\Http\Middleware\CheckApiRespondApiKey::class,
         'role.admin' => \App\Http\Middleware\AdminRoleMiddleware::class,
+        'basic_auth' => \App\Http\Middleware\BasicAuthMiddleware::class,
     ];
 }

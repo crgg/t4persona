@@ -21,4 +21,7 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('logs', [LogViewerController::class, 'index']);
+Route::group(['middleware' => 'basic_auth'], function() {
+    Route::get('logs', [LogViewerController::class, 'index']);
+});
+
