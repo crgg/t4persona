@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Rap2hpoutre\LaravelLogViewer\LogViewerController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,3 +16,9 @@ use Illuminate\Support\Facades\Route;
 
 //Route::view('/{any}', 'app')->where('any', '^(?!api).*$');
 
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get('logs', [LogViewerController::class, 'index']);
